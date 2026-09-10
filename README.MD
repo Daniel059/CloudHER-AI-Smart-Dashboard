@@ -13,36 +13,32 @@
   <img src="https://img.shields.io/badge/Status-Final%20Project%20Completed-success" alt="Status">
 </p>
 
+<p align="center">
+  🔗 <strong><a href="http://cloudher-ai-smart-dashboard-websitebucket-phaedfiamhjd.s3-website-us-east-1.amazonaws.com/">View the Live Demo</a></strong>
+</p>
+
 ---
 
 ## Table of Contents
 
-- [CloudHER AI Smart Dashboard](#cloudher-ai-smart-dashboard)
-  - [Table of Contents](#table-of-contents)
-  - [Overview](#overview)
-  - [Architecture](#architecture)
-  - [Features](#features)
-  - [Tech Stack](#tech-stack)
-  - [Prerequisites](#prerequisites)
-  - [Project Structure](#project-structure)
-  - [Deployment Guide](#deployment-guide)
-    - [1. Create an S3 bucket for Lambda packages](#1-create-an-s3-bucket-for-lambda-packages)
-    - [2. Package and upload the Lambda functions](#2-package-and-upload-the-lambda-functions)
-    - [3. Deploy the CloudFormation stack](#3-deploy-the-cloudformation-stack)
-    - [4. Upload the website to S3](#4-upload-the-website-to-s3)
-  - [How the Application Works](#how-the-application-works)
-  - [Troubleshooting Notes](#troubleshooting-notes)
-    - [1. AI Analysis returned “The AI analysis service returned an error”](#1-ai-analysis-returned-the-ai-analysis-service-returned-an-error)
-    - [2. Contact form failed with AccessDenied on `ses:SendEmail`](#2-contact-form-failed-with-accessdenied-on-sessendemail)
-    - [3. Live dashboard stuck on “Loading submissions…”](#3-live-dashboard-stuck-on-loading-submissions)
-    - [4. SES Sandbox restriction](#4-ses-sandbox-restriction)
-  - [Deliverables Checklist](#deliverables-checklist)
-  - [Skills Demonstrated](#skills-demonstrated)
-  - [What I Learned](#what-i-learned)
-  - [Cleanup](#cleanup)
-  - [Author](#author)
-  - [Acknowledgements](#acknowledgements)
-  - [License](#license)
+- [Overview](#overview)
+- [Live Demo](#live-demo)
+- [Architecture](#architecture)
+- [Features](#features)
+- [Tech Stack](#tech-stack)
+- [Prerequisites](#prerequisites)
+- [Project Structure](#project-structure)
+- [How I Built This (Step by Step)](#how-i-built-this-step-by-step)
+- [How the Application Works](#how-the-application-works)
+- [Troubleshooting Notes](#troubleshooting-notes)
+- [Screenshots](#screenshots)
+- [Deliverables Checklist](#deliverables-checklist)
+- [Skills Demonstrated](#skills-demonstrated)
+- [What I Learned](#what-i-learned)
+- [Cleanup](#cleanup)
+- [Author](#author)
+- [Acknowledgements](#acknowledgements)
+- [License](#license)
 
 ---
 
@@ -50,22 +46,28 @@
 
 This is the **final capstone project** for the CloudHER by WIICA mentorship program.
 
-The **CloudHER AI Smart Dashboard** is a fully serverless web application that allows users to:
+The **CloudHER AI Smart Dashboard** is a fully serverless web application that lets anyone:
 
-1. Upload a text document and receive an AI-generated summary (powered by Groq)
+1. Upload a text document and get an AI-generated summary (powered by Groq)
 2. Send a contact message and receive an automatic confirmation email
-3. View every submission in real time on a live dashboard
+3. Watch every submission appear in real time on a live dashboard
 
-Everything is deployed with **AWS CloudFormation** and runs on:
+Everything you see below — every AWS resource, every permission, every network rule — is created from **one single CloudFormation template**. There is no manual clicking-around in the console to set things up; the whole infrastructure is defined as code.
 
-- API Gateway
-- Three Lambda functions
-- DynamoDB
-- S3 (static website)
-- SES (email)
-- VPC with private subnets + NAT Gateway
+---
 
-The goal was to build a production-style serverless application that combines infrastructure-as-code, secure networking, AI integration, and a clean frontend — all while staying within free-tier limits where possible.
+## Live Demo
+
+You can try the deployed application right now, no setup required:
+
+**🔗 [http://cloudher-ai-smart-dashboard-websitebucket-phaedfiamhjd.s3-website-us-east-1.amazonaws.com/](http://cloudher-ai-smart-dashboard-websitebucket-phaedfiamhjd.s3-website-us-east-1.amazonaws.com/)**
+
+Try it out:
+- Upload a `.txt` or `.md` file and watch Groq AI summarize it in seconds
+- Fill out the contact form and check your inbox for a confirmation email
+- Watch the "Live Submissions" panel update automatically with what you just did
+
+> **Note:** Amazon SES is currently in "sandbox mode" on this account, so confirmation emails will only successfully deliver to addresses that have been manually verified. See [SES Sandbox restriction](#4-ses-sandbox-restriction) below.
 
 ---
 
@@ -96,7 +98,7 @@ The goal was to build a production-style serverless application that combines in
                (index.html + error.html)
 ```
 
-All three Lambda functions run inside **private subnets** and reach the internet through a **NAT Gateway**. DynamoDB traffic stays private via a VPC Gateway Endpoint.
+All three Lambda functions run inside **private subnets** and reach the internet through a **NAT Gateway**. DynamoDB traffic stays private via a VPC Gateway Endpoint — it never touches the public internet.
 
 ---
 
@@ -105,11 +107,11 @@ All three Lambda functions run inside **private subnets** and reach the internet
 | Feature | Description |
 |---------|-------------|
 | **AI Document Summarizer** | Upload `.txt` / `.md` files → Groq AI returns a concise summary |
-| **Contact Form** | Sends confirmation email to the user + notification to the owner via Amazon SES |
-| **Live Submissions Dashboard** | Automatically refreshes and shows every analysis + contact message |
-| **Serverless Architecture** | No servers to manage — fully event-driven |
-| **Infrastructure as Code** | Entire stack deployed with one CloudFormation template |
-| **Secure Networking** | Lambdas in private subnets, least-privilege IAM roles |
+| **Contact Form** | Sends a confirmation email to the visitor + a notification email to the owner, via Amazon SES |
+| **Live Submissions Dashboard** | Refreshes automatically and shows every analysis + contact message as it happens |
+| **Serverless Architecture** | No servers to manage — everything is event-driven |
+| **Infrastructure as Code** | The entire stack deploys from one CloudFormation template |
+| **Secure Networking** | Lambdas run in private subnets; every IAM role is scoped to only what it needs |
 
 ---
 
@@ -120,7 +122,7 @@ All three Lambda functions run inside **private subnets** and reach the internet
 - **API**: Amazon API Gateway (HTTP API)
 - **Database**: Amazon DynamoDB
 - **Email**: Amazon SES
-- **AI**: Groq API (`openai/gpt-oss-20b`)
+- **AI**: Groq API
 - **Infrastructure**: AWS CloudFormation
 - **Networking**: VPC, Private Subnets, NAT Gateway, VPC Endpoints
 - **Storage**: Amazon S3 (static website hosting)
@@ -129,38 +131,38 @@ All three Lambda functions run inside **private subnets** and reach the internet
 
 ## Prerequisites
 
-- AWS account
-- AWS CLI configured
-- A Groq API key ([console.groq.com](https://console.groq.com))
+- An AWS account
+- The AWS CLI configured (or just the AWS Console — either works)
+- A free Groq API key ([console.groq.com](https://console.groq.com))
 - At least one email address verified in Amazon SES
-- Basic familiarity with the AWS console
+- No prior AWS experience required to follow the steps below
 
 ---
 
 ## Project Structure
 
 ```text
-CloudHER-AI-Smart-Dashboard/
+cloudher-ai-smart-dashboard/
 │
 ├── Infrastructure/
-│   └── main-template.yaml          # Full CloudFormation stack
+│   └── main-template.yaml          # The full CloudFormation stack (everything is built from this one file)
 │
 ├── Lambda/
-│   ├── analyzer_handler.py         # Calls Groq AI
-│   ├── contact_handler.py          # Saves to DynamoDB + sends SES emails
-│   ├── dashboard_handler.py        # Scans DynamoDB for live dashboard
+│   ├── analyzer_handler.py         # Calls Groq AI to summarize documents
+│   ├── contact_handler.py          # Saves messages to DynamoDB + sends SES emails
+│   ├── dashboard_handler.py        # Reads DynamoDB for the live dashboard
 │   ├── analyzer_function.zip
 │   ├── contact_function.zip
 │   └── dashboard_function.zip
 │
 ├── Website/
-│   ├── index.html                  # Main frontend
+│   ├── index.html                  # The main page (upload, contact form, live dashboard)
 │   └── error.html
 │
 ├── scripts/
-│   └── package_lambdas.sh          # Helper script to zip & upload Lambdas
+│   └── package_lambdas.sh          # Helper script that zips and uploads the Lambda code
 │
-├── Screenshots/                    # Evidence of the working application
+├── Screenshots/                    # Visual proof the project actually works (see below)
 │
 ├── README.md
 ├── .gitignore
@@ -169,69 +171,112 @@ CloudHER-AI-Smart-Dashboard/
 
 ---
 
-## Deployment Guide
+## How I Built This (Step by Step)
 
-### 1. Create an S3 bucket for Lambda packages
+This section walks through exactly how the project came together, in the order I actually did it — useful if you want to rebuild this yourself or just understand what each piece is for.
 
-```bash
-aws s3 mb s3://YOUR-DEPLOYMENT-BUCKET-NAME
-```
+### Step 1 — Design the combined architecture
 
-### 2. Package and upload the Lambda functions
+The milestone required merging a "File Analyser" and a "Contact Form" into one project. I designed one shared DynamoDB table that both features write to, so a single live dashboard could show all of it in one place, instead of building two disconnected apps.
 
-```bash
-cd scripts
-chmod +x package_lambdas.sh
-./package_lambdas.sh YOUR-DEPLOYMENT-BUCKET-NAME
-```
+### Step 2 — Write the CloudFormation template
 
-### 3. Deploy the CloudFormation stack
+Everything — the VPC, the S3 website bucket, the DynamoDB table, all three Lambda functions, the API Gateway routes, the IAM roles, and the CloudWatch alarms — lives in `Infrastructure/main-template.yaml`. Writing it as one template means the whole project can be torn down and rebuilt with two commands, instead of dozens of manual console clicks.
 
-```bash
-aws cloudformation deploy \
-  --template-file Infrastructure/main-template.yaml \
-  --stack-name cloudher-ai-smart-dashboard \
-  --capabilities CAPABILITY_NAMED_IAM \
-  --parameter-overrides \
-    LambdaDeploymentBucket=YOUR-DEPLOYMENT-BUCKET-NAME \
-    GroqApiKey=YOUR_GROQ_API_KEY \
-    SenderEmail=your-verified-email@gmail.com \
-    RecipientEmail=your-verified-email@gmail.com
-```
+### Step 3 — Write the three Lambda functions
 
-### 4. Upload the website to S3
+- `analyzer_handler.py` reads the uploaded document text and asks Groq AI to summarize it
+- `contact_handler.py` saves the contact form's message to DynamoDB and sends two emails through SES
+- `dashboard_handler.py` reads everything back out of DynamoDB for the live feed
 
-Upload `Website/index.html` and `Website/error.html` to the website bucket created by the stack and enable static website hosting.
+### Step 4 — Create an S3 bucket for the Lambda code
+
+CloudFormation needs the Lambda code sitting in S3 *before* it can deploy, so I created a small bucket (`cloudher-dashboard-deploy-daniel-musyoka`) just to hold the three zip files.
+
+**📸 Screenshot 1** shows this bucket with all three zips uploaded.
+
+### Step 5 — Get a Groq API key
+
+The Analyzer Lambda needs an API key to call Groq's AI service. I created a free account at [console.groq.com](https://console.groq.com) and generated a key under **API Keys**.
+
+### Step 6 — Package and upload the Lambda functions
+
+Each Lambda handler gets zipped up and uploaded to the S3 bucket from Step 4, using either the provided script or manually zipping each `.py` file and uploading through the S3 console.
+
+### Step 7 — Deploy the CloudFormation stack
+
+With the Lambda code in S3 and a Groq key in hand, I deployed the stack through the CloudFormation console: uploaded `main-template.yaml`, filled in the parameters (bucket name, Groq key, sender/recipient email), acknowledged the IAM capability warning, and hit Submit.
+
+**📸 Screenshot 2** shows the stack reaching `CREATE_COMPLETE`.
+**📸 Screenshot 3** shows the Outputs tab with the live URLs.
+**📸 Screenshot 4** shows the VPC that got created — private subnets, NAT Gateway, and all.
+
+> **Note:** The first attempt failed validation because a Lambda function name from an earlier project (Week 8) was already in use. The fix was renaming the conflicting resources in the template (`cloudher-contact-form-handler` → `cloudher-dashboard-contact-handler`) so the new stack could exist independently alongside the old one.
+
+### Step 8 — Verify email addresses in SES
+
+Amazon SES blocks sending email to unverified addresses by default. I verified both the sender and recipient addresses in **SES → Verified identities**.
+
+**📸 Screenshot 5** shows both addresses verified.
+
+### Step 9 — Connect the frontend to the live API
+
+Once the stack was deployed, I copied the `ApiEndpoint` value from the Outputs tab and pasted it into `Website/index.html`, then uploaded `index.html` and `error.html` to the website bucket the stack created.
+
+### Step 10 — Test everything end-to-end
+
+**📸 Screenshots 6a–6c** show the live site: a document being summarized, a contact form submission succeeding, and both showing up on the live dashboard.
+**📸 Screenshot 7** shows both submission types sitting in the DynamoDB table.
+**📸 Screenshot 8** shows a clean Lambda execution in CloudWatch Logs, with no errors.
 
 ---
 
 ## How the Application Works
 
-1. User uploads a document on the website
-2. Frontend sends the text to `POST /analyze`
-3. Analyzer Lambda calls Groq AI and saves the summary to DynamoDB
-4. User fills the contact form → `POST /contact`
-5. Contact Lambda saves the message and sends two emails via SES
-6. Live dashboard calls `GET /submissions` every few seconds and displays everything
+1. A visitor uploads a document on the website
+2. The frontend sends the text to `POST /analyze`
+3. The Analyzer Lambda calls Groq AI and saves the summary to DynamoDB
+4. A visitor fills out the contact form → `POST /contact`
+5. The Contact Lambda saves the message and sends two emails via SES (one to the visitor, one to the site owner)
+6. The live dashboard calls `GET /submissions` every few seconds and displays everything as it comes in
 
 ---
 
 ## Troubleshooting Notes
 
-### 1. AI Analysis returned “The AI analysis service returned an error”
-**Cause:** Groq blocked the request because of the default Python `User-Agent`.  
+### 1. AI Analysis returned "The AI analysis service returned an error"
+**Cause:** Groq blocked the request because of the default Python `User-Agent`.
 **Fix:** Added a custom `User-Agent` header in `analyzer_handler.py`.
 
 ### 2. Contact form failed with AccessDenied on `ses:SendEmail`
-**Cause:** IAM role only allowed one specific email identity.  
-**Fix:** Updated the role policy to allow `ses:SendEmail` on `*`.
+**Cause:** The IAM role only allowed one specific verified email identity.
+**Fix:** Updated the role's policy to permit `ses:SendEmail`.
 
-### 3. Live dashboard stuck on “Loading submissions…”
-**Cause:** DynamoDB returns numbers as `Decimal`, which `json.dumps` cannot serialize.  
+### 3. Live dashboard stuck on "Loading submissions…"
+**Cause:** DynamoDB returns numbers as `Decimal`, which Python's `json.dumps` can't serialize by default.
 **Fix:** Added a custom JSON encoder in `dashboard_handler.py`.
 
 ### 4. SES Sandbox restriction
-While the account is in SES sandbox, emails can only be sent to verified addresses. Request production access when ready.
+While the AWS account is in SES sandbox mode, emails can only be sent to addresses that have been manually verified. Requesting SES production access (a free AWS support request) would let the app send confirmation emails to any visitor.
+
+---
+
+## Screenshots
+
+All screenshots below are stored in [`Screenshots/`](./Screenshots) and are numbered in the order they happened during the build.
+
+| # | What it shows |
+|---|---|
+| ![Lambda deployment bucket](./Screenshots/01-lambda-deployment-bucket.png) | **01 — Lambda deployment bucket.** All three Lambda zip files uploaded and ready before deploying the stack. |
+| ![Stack CREATE_COMPLETE](./Screenshots/02-stack-create-complete.png) | **02 — Stack CREATE_COMPLETE.** The full CloudFormation stack — all 45 resources — deployed successfully. |
+| ![Stack outputs](./Screenshots/03-stack-outputs.png) | **03 — Stack Outputs.** The live WebsiteURL, ApiEndpoint, DynamoDB table name, and VPC ID produced by the deployment. |
+| ![VPC resource map](./Screenshots/04-vpc-resource-map.png) | **04 — VPC resource map.** Private subnets, NAT Gateway, and routing, all created automatically by the template. |
+| ![SES verified identities](./Screenshots/05-ses-verified-identities.png) | **05 — SES verified identities.** Both email addresses verified and ready to send/receive. |
+| ![Live site — document analysis](./Screenshots/06a-live-site-analysis.png) | **06a — Document analysis in action.** A real document uploaded and summarized by Groq AI. |
+| ![Live site — contact form](./Screenshots/06b-live-site-contact.png) | **06b — Contact form success.** A message submitted through the live site. |
+| ![Live site — dashboard feed](./Screenshots/06c-live-site-dashboard.png) | **06c — Live dashboard.** Both submission types appearing together in real time. |
+| ![DynamoDB table](./Screenshots/07-dynamodb-table.png) | **07 — DynamoDB table.** Real analysis and contact records stored side by side. |
+| ![CloudWatch logs](./Screenshots/08-cloudwatch-logs.png) | **08 — CloudWatch Logs.** A clean Lambda execution with no errors. |
 
 ---
 
@@ -246,7 +291,7 @@ While the account is in SES sandbox, emails can only be sent to verified address
 - [x] VPC with private subnets + NAT Gateway
 - [x] Least-privilege IAM roles
 - [x] Screenshots of the running application
-- [x] Clean GitHub repository with documentation
+- [x] Clean, documented GitHub repository
 
 ---
 
@@ -258,7 +303,7 @@ While the account is in SES sandbox, emails can only be sent to verified address
 - DynamoDB design and querying
 - Amazon SES integration
 - Third-party AI API integration (Groq)
-- Frontend ↔ Backend communication
+- Frontend ↔ backend communication
 - Debugging with CloudWatch Logs
 - IAM least-privilege policies
 - End-to-end project delivery
@@ -269,8 +314,8 @@ While the account is in SES sandbox, emails can only be sent to verified address
 
 - How to design a complete serverless application from scratch
 - Why Lambdas in private subnets need a NAT Gateway for outbound internet access
-- How DynamoDB `Decimal` types break normal JSON serialization
-- How Cloudflare / Groq can block requests based on User-Agent
+- How DynamoDB's `Decimal` type breaks normal JSON serialization
+- How third-party APIs like Groq can block requests based on `User-Agent`
 - The importance of reading CloudWatch logs instead of guessing
 - How SES sandbox mode affects real-world testing
 - How to structure a professional final project repository
@@ -279,15 +324,15 @@ While the account is in SES sandbox, emails can only be sent to verified address
 
 ## Cleanup
 
-To avoid ongoing charges:
+To avoid ongoing AWS charges:
 
 ```bash
 aws cloudformation delete-stack --stack-name cloudher-ai-smart-dashboard
 ```
 
-Also delete:
+Also remember to delete:
 - The Lambda deployment S3 bucket
-- Any leftover NAT Gateway / Elastic IP if the stack does not remove them automatically
+- Any leftover NAT Gateway or Elastic IP, if the stack doesn't remove them automatically
 
 ---
 
@@ -313,7 +358,4 @@ Special thanks to:
 
 ## License
 
-This project is intended for educational and portfolio purposes.
-```
-
----
+This project is intended for educational and portfolio purposes. See [LICENSE](./LICENSE) for details.
