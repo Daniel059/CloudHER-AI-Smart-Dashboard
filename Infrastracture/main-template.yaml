@@ -1,0 +1,616 @@
+AWSTemplateFormatVersion: "2010-09-09"
+
+Description: >
+  CloudHER AI Smart Dashboard — Milestone Project.
+  A full-stack, AI-powered, serverless web application deployed entirely
+  from this one CloudFormation template. Combines a document analyser
+  (Groq AI) and a contact form, both writing to a shared DynamoDB table
+  that feeds a real-time submissions dashboard. Lambda functions run
+  inside a private VPC subnet, reach the internet via a NAT Gateway,
+  and reach DynamoDB via a VPC Gateway Endpoint. All IAM roles are
+  scoped to only the actions/resources each function needs.
+
+# ---------------------------------------------------------------------------
+# PARAMETERS
+# ---------------------------------------------------------------------------
+Parameters:
+  LambdaDeploymentBucket:
+    Type: String
+    Description: >
+      Existing S3 bucket that holds the zipped Lambda deployment packages
+      (contact_function.zip, analyzer_function.zip, dashboard_function.zip).
+      You must create this bucket and upload the zips BEFORE deploying this
+      stack (see /scripts/package_lambdas.sh).
+
+  GroqApiKey:
+    Type: String
+    NoEcho: true
+    Description: Your Groq API key, used by the Analyzer Lambda to call Groq AI.
+
+  SenderEmail:
+    Type: String
+    Description: SES-verified email address that sends confirmation/notification emails.
+
+  RecipientEmail:
+    Type: String
+    Description: Email address that receives contact-form notifications and CloudWatch alarms.
+
+  VpcCidr:
+    Type: String
+    Default: 10.0.0.0/16
+
+  PublicSubnetCidr:
+    Type: String
+    Default: 10.0.0.0/24
+
+  PrivateSubnetACidr:
+    Type: String
+    Default: 10.0.1.0/24
+
+  PrivateSubnetBCidr:
+    Type: String
+    Default: 10.0.2.0/24
+
+# ---------------------------------------------------------------------------
+# RESOURCES
+# ---------------------------------------------------------------------------
+Resources:
+  # ---------------------------------------------------------------------
+  # NETWORKING (VPC) — Lambdas live in private subnets. NAT Gateway gives
+  # them internet access (Groq API, SES public endpoint). A DynamoDB
+  # Gateway Endpoint keeps DynamoDB traffic on the AWS network, never
+  # touching the public internet.
+  # ---------------------------------------------------------------------
+  DashboardVPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: !Ref VpcCidr
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags:
+        - Key: Name
+          Value: cloudher-dashboard-vpc
+
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Name
+          Value: cloudher-dashboard-igw
+
+  IgwAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref DashboardVPC
+      InternetGatewayId: !Ref InternetGateway
+
+  PublicSubnet:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref DashboardVPC
+      CidrBlock: !Ref PublicSubnetCidr
+      AvailabilityZone: !Select [0, !GetAZs ""]
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: cloudher-public-subnet
+
+  PrivateSubnetA:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref DashboardVPC
+      CidrBlock: !Ref PrivateSubnetACidr
+      AvailabilityZone: !Select [0, !GetAZs ""]
+      Tags:
+        - Key: Name
+          Value: cloudher-private-subnet-a
+
+  PrivateSubnetB:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref DashboardVPC
+      CidrBlock: !Ref PrivateSubnetBCidr
+      AvailabilityZone: !Select [1, !GetAZs ""]
+      Tags:
+        - Key: Name
+          Value: cloudher-private-subnet-b
+
+  NatEIP:
+    Type: AWS::EC2::EIP
+    DependsOn: IgwAttachment
+    Properties:
+      Domain: vpc
+
+  NatGateway:
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId: !GetAtt NatEIP.AllocationId
+      SubnetId: !Ref PublicSubnet
+      Tags:
+        - Key: Name
+          Value: cloudher-nat-gateway
+
+  PublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref DashboardVPC
+      Tags:
+        - Key: Name
+          Value: cloudher-public-rt
+
+  PublicRoute:
+    Type: AWS::EC2::Route
+    DependsOn: IgwAttachment
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+
+  PublicSubnetRouteAssoc:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSubnet
+      RouteTableId: !Ref PublicRouteTable
+
+  PrivateRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref DashboardVPC
+      Tags:
+        - Key: Name
+          Value: cloudher-private-rt
+
+  PrivateRoute:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref PrivateRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref NatGateway
+
+  PrivateSubnetARouteAssoc:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PrivateSubnetA
+      RouteTableId: !Ref PrivateRouteTable
+
+  PrivateSubnetBRouteAssoc:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PrivateSubnetB
+      RouteTableId: !Ref PrivateRouteTable
+
+  DynamoDbEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      VpcId: !Ref DashboardVPC
+      ServiceName: !Sub "com.amazonaws.${AWS::Region}.dynamodb"
+      VpcEndpointType: Gateway
+      RouteTableIds:
+        - !Ref PrivateRouteTable
+
+  LambdaSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security group for CloudHER dashboard Lambda functions
+      VpcId: !Ref DashboardVPC
+      SecurityGroupEgress:
+        - IpProtocol: -1
+          CidrIp: 0.0.0.0/0
+          Description: Allow all outbound (Groq API, SES, DynamoDB endpoint)
+      Tags:
+        - Key: Name
+          Value: cloudher-lambda-sg
+
+  # ---------------------------------------------------------------------
+  # FRONTEND — S3 static website
+  # ---------------------------------------------------------------------
+  WebsiteBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      WebsiteConfiguration:
+        IndexDocument: index.html
+        ErrorDocument: error.html
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        IgnorePublicAcls: true
+        BlockPublicPolicy: false
+        RestrictPublicBuckets: false
+
+  WebsiteBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref WebsiteBucket
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: PublicReadGetObject
+            Effect: Allow
+            Principal: "*"
+            Action:
+              - s3:GetObject
+            Resource: !Sub "${WebsiteBucket.Arn}/*"
+
+  # ---------------------------------------------------------------------
+  # DATA — single DynamoDB table for both analysis results and contact
+  # submissions (differentiated by the "type" attribute), so the
+  # dashboard has one source to read for "all submissions".
+  # ---------------------------------------------------------------------
+  SubmissionsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: cloudher-dashboard-submissions
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: submissionId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: submissionId
+          KeyType: HASH
+
+  # ---------------------------------------------------------------------
+  # MONITORING — SNS topic that CloudWatch alarms notify
+  # ---------------------------------------------------------------------
+  AlarmTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: cloudher-dashboard-alarms
+
+  AlarmEmailSubscription:
+    Type: AWS::SNS::Subscription
+    Properties:
+      TopicArn: !Ref AlarmTopic
+      Protocol: email
+      Endpoint: !Ref RecipientEmail
+
+  # ---------------------------------------------------------------------
+  # LOG GROUPS — explicit, with retention, one per function
+  # ---------------------------------------------------------------------
+  AnalyzerLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: /aws/lambda/cloudher-analyzer-handler
+      RetentionInDays: 14
+
+  ContactLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: /aws/lambda/cloudher-dashboard-contact-handler
+      RetentionInDays: 14
+
+  DashboardLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: /aws/lambda/cloudher-dashboard-handler
+      RetentionInDays: 14
+
+  # ---------------------------------------------------------------------
+  # IAM — one least-privilege role per Lambda
+  # ---------------------------------------------------------------------
+  AnalyzerLambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: cloudher-analyzer-lambda-role
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole
+      Policies:
+        - PolicyName: AnalyzerLambdaPermissions
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: !Sub "${AnalyzerLogGroup.Arn}:*"
+              - Effect: Allow
+                Action:
+                  - dynamodb:PutItem
+                Resource: !GetAtt SubmissionsTable.Arn
+
+  ContactLambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: cloudher-dashboard-contact-lambda-role
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole
+      Policies:
+        - PolicyName: ContactLambdaPermissions
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: !Sub "${ContactLogGroup.Arn}:*"
+              - Effect: Allow
+                Action:
+                  - dynamodb:PutItem
+                Resource: !GetAtt SubmissionsTable.Arn
+              - Effect: Allow
+                Action:
+                  - ses:SendEmail
+                  - ses:SendRawEmail
+                Resource: !Sub "arn:aws:ses:${AWS::Region}:${AWS::AccountId}:identity/${SenderEmail}"
+
+  DashboardLambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: cloudher-dashboard-lambda-role
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole
+      Policies:
+        - PolicyName: DashboardLambdaPermissions
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: !Sub "${DashboardLogGroup.Arn}:*"
+              - Effect: Allow
+                Action:
+                  - dynamodb:Scan
+                Resource: !GetAtt SubmissionsTable.Arn
+
+  # ---------------------------------------------------------------------
+  # LAMBDA FUNCTIONS — all deployed inside the private subnets
+  # ---------------------------------------------------------------------
+  AnalyzerFunction:
+    Type: AWS::Lambda::Function
+    DependsOn: AnalyzerLogGroup
+    Properties:
+      FunctionName: cloudher-analyzer-handler
+      Runtime: python3.12
+      Handler: analyzer_handler.lambda_handler
+      Timeout: 30
+      Role: !GetAtt AnalyzerLambdaRole.Arn
+      Code:
+        S3Bucket: !Ref LambdaDeploymentBucket
+        S3Key: analyzer_function.zip
+      Environment:
+        Variables:
+          GROQ_API_KEY: !Ref GroqApiKey
+          TABLE_NAME: !Ref SubmissionsTable
+      VpcConfig:
+        SecurityGroupIds:
+          - !Ref LambdaSecurityGroup
+        SubnetIds:
+          - !Ref PrivateSubnetA
+          - !Ref PrivateSubnetB
+
+  ContactLambda:
+    Type: AWS::Lambda::Function
+    DependsOn: ContactLogGroup
+    Properties:
+      FunctionName: cloudher-dashboard-contact-handler
+      Runtime: python3.12
+      Handler: contact_handler.lambda_handler
+      Timeout: 15
+      Role: !GetAtt ContactLambdaRole.Arn
+      Code:
+        S3Bucket: !Ref LambdaDeploymentBucket
+        S3Key: contact_function.zip
+      Environment:
+        Variables:
+          TABLE_NAME: !Ref SubmissionsTable
+          SENDER_EMAIL: !Ref SenderEmail
+          RECIPIENT_EMAIL: !Ref RecipientEmail
+      VpcConfig:
+        SecurityGroupIds:
+          - !Ref LambdaSecurityGroup
+        SubnetIds:
+          - !Ref PrivateSubnetA
+          - !Ref PrivateSubnetB
+
+  DashboardFunction:
+    Type: AWS::Lambda::Function
+    DependsOn: DashboardLogGroup
+    Properties:
+      FunctionName: cloudher-dashboard-handler
+      Runtime: python3.12
+      Handler: dashboard_handler.lambda_handler
+      Timeout: 15
+      Role: !GetAtt DashboardLambdaRole.Arn
+      Code:
+        S3Bucket: !Ref LambdaDeploymentBucket
+        S3Key: dashboard_function.zip
+      Environment:
+        Variables:
+          TABLE_NAME: !Ref SubmissionsTable
+      VpcConfig:
+        SecurityGroupIds:
+          - !Ref LambdaSecurityGroup
+        SubnetIds:
+          - !Ref PrivateSubnetA
+          - !Ref PrivateSubnetB
+
+  # ---------------------------------------------------------------------
+  # API GATEWAY (HTTP API) — 3 routes, one per Lambda
+  # ---------------------------------------------------------------------
+  DashboardApi:
+    Type: AWS::ApiGatewayV2::Api
+    Properties:
+      Name: cloudher-dashboard-api
+      ProtocolType: HTTP
+      CorsConfiguration:
+        AllowOrigins:
+          - "*"
+        AllowMethods:
+          - GET
+          - POST
+          - OPTIONS
+        AllowHeaders:
+          - Content-Type
+
+  ApiStage:
+    Type: AWS::ApiGatewayV2::Stage
+    Properties:
+      ApiId: !Ref DashboardApi
+      StageName: "$default"
+      AutoDeploy: true
+
+  AnalyzerIntegration:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref DashboardApi
+      IntegrationType: AWS_PROXY
+      IntegrationUri: !GetAtt AnalyzerFunction.Arn
+      PayloadFormatVersion: "2.0"
+
+  AnalyzerRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref DashboardApi
+      RouteKey: POST /analyze
+      Target: !Sub "integrations/${AnalyzerIntegration}"
+
+  AnalyzerPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref AnalyzerFunction
+      Action: lambda:InvokeFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${DashboardApi}/*/POST/analyze"
+
+  ContactApiIntegration:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref DashboardApi
+      IntegrationType: AWS_PROXY
+      IntegrationUri: !GetAtt ContactLambda.Arn
+      PayloadFormatVersion: "2.0"
+
+  ContactApiRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref DashboardApi
+      RouteKey: POST /contact
+      Target: !Sub "integrations/${ContactApiIntegration}"
+
+  ContactLambdaPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref ContactLambda
+      Action: lambda:InvokeFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${DashboardApi}/*/POST/contact"
+
+  DashboardIntegration:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref DashboardApi
+      IntegrationType: AWS_PROXY
+      IntegrationUri: !GetAtt DashboardFunction.Arn
+      PayloadFormatVersion: "2.0"
+
+  DashboardRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref DashboardApi
+      RouteKey: GET /submissions
+      Target: !Sub "integrations/${DashboardIntegration}"
+
+  DashboardPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref DashboardFunction
+      Action: lambda:InvokeFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${DashboardApi}/*/GET/submissions"
+
+  # ---------------------------------------------------------------------
+  # CLOUDWATCH ALARMS — errors on any function notify AlarmTopic
+  # ---------------------------------------------------------------------
+  AnalyzerErrorAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: cloudher-analyzer-errors
+      Namespace: AWS/Lambda
+      MetricName: Errors
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref AnalyzerFunction
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      AlarmActions:
+        - !Ref AlarmTopic
+
+  ContactErrorAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: cloudher-contact-errors
+      Namespace: AWS/Lambda
+      MetricName: Errors
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref ContactLambda
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      AlarmActions:
+        - !Ref AlarmTopic
+
+  DashboardErrorAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: cloudher-dashboard-errors
+      Namespace: AWS/Lambda
+      MetricName: Errors
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref DashboardFunction
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      AlarmActions:
+        - !Ref AlarmTopic
+
+# ---------------------------------------------------------------------------
+# OUTPUTS
+# ---------------------------------------------------------------------------
+Outputs:
+  WebsiteURL:
+    Description: URL of the S3 static website
+    Value: !GetAtt WebsiteBucket.WebsiteURL
+
+  ApiEndpoint:
+    Description: Base URL of the HTTP API
+    Value: !Sub "https://${DashboardApi}.execute-api.${AWS::Region}.amazonaws.com"
+
+  DynamoDBTableName:
+    Description: Name of the shared submissions table
+    Value: !Ref SubmissionsTable
+
+  VpcId:
+    Description: ID of the dashboard VPC
+    Value: !Ref DashboardVPC
