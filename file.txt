@@ -1,0 +1,12 @@
+CloudHER AI Smart Dashboard Project
+This project is a full serverless application built on AWS. It allows users to upload text documents and receive AI-generated summaries using the Groq API. The application also includes a contact form that sends confirmation emails through Amazon SES and stores every submission in DynamoDB.
+The architecture uses Amazon API Gateway, three Lambda functions, a DynamoDB table, S3 for the static website, and SES for email. All Lambda functions run inside a private VPC with a NAT Gateway for internet access. The frontend is a simple HTML page hosted on S3 that calls the API endpoints for document analysis, contact form submission, and live dashboard updates.
+The main goal of the project is to demonstrate how to combine multiple AWS services into a working, production-style application while using free-tier resources and Groq’s fast AI models.
+Key features include:
+
+Document upload and AI summarization
+Contact form with automatic email confirmation
+Real-time submissions dashboard
+Secure networking with VPC, private subnets, and IAM least-privilege roles
+
+This project was completed as part of the CloudHER by WIICA program.
