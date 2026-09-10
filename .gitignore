@@ -1,0 +1,48 @@
+# AWS
+.aws/
+*.pem
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+.venv/
+*.egg-info/
+dist/
+build/
+
+# Lambda packages (keep source, ignore rebuilds if desired)
+# Lambda/*.zip
+
+# IDE / OS
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# Environment / secrets
+.env
+.env.*
+*.env
+secrets.json
+config.local.json
+
+# Logs
+*.log
+logs/
+
+# Temporary
+tmp/
+temp/
+*.tmp
+*.bak
+
+# CloudFormation
+*.zip
+!Lambda/*.zip
