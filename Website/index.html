@@ -1,0 +1,517 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>CloudHER | AI Smart Dashboard</title>
+
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: Arial, Helvetica, sans-serif;
+            min-height: 100vh;
+            background:
+                radial-gradient(circle at top left, #243b55, transparent 40%),
+                radial-gradient(circle at bottom right, #141e30, transparent 45%),
+                #0b1120;
+            color: #f8fafc;
+            padding: 30px;
+        }
+
+        .page {
+            max-width: 1100px;
+            margin: 0 auto;
+        }
+
+        header {
+            text-align: center;
+            margin-bottom: 35px;
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 7px 14px;
+            border-radius: 999px;
+            background: rgba(56, 189, 248, 0.12);
+            border: 1px solid rgba(56, 189, 248, 0.35);
+            color: #38bdf8;
+            font-size: 13px;
+            font-weight: bold;
+            margin-bottom: 18px;
+        }
+
+        h1 {
+            font-size: 42px;
+            margin-bottom: 12px;
+        }
+
+        .highlight {
+            color: #38bdf8;
+        }
+
+        header p {
+            color: #94a3b8;
+            max-width: 600px;
+            margin: 0 auto;
+            line-height: 1.6;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 24px;
+            margin-bottom: 24px;
+        }
+
+        .card {
+            background: rgba(15, 23, 42, 0.88);
+            border: 1px solid rgba(148, 163, 184, 0.2);
+            border-radius: 20px;
+            padding: 32px;
+            box-shadow: 0 25px 70px rgba(0, 0, 0, 0.35);
+            backdrop-filter: blur(12px);
+        }
+
+        .card h2 {
+            font-size: 22px;
+            margin-bottom: 6px;
+        }
+
+        .card .intro {
+            color: #94a3b8;
+            font-size: 13px;
+            line-height: 1.6;
+            margin-bottom: 22px;
+        }
+
+        .form-group {
+            margin-bottom: 16px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-size: 13px;
+            color: #cbd5e1;
+        }
+
+        input,
+        textarea {
+            width: 100%;
+            padding: 12px 14px;
+            border-radius: 10px;
+            border: 1px solid #334155;
+            background: #0f172a;
+            color: white;
+            outline: none;
+            font-size: 14px;
+        }
+
+        input[type="file"] {
+            padding: 10px;
+        }
+
+        input:focus,
+        textarea:focus {
+            border-color: #38bdf8;
+            box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.1);
+        }
+
+        textarea {
+            min-height: 110px;
+            resize: vertical;
+        }
+
+        button {
+            width: 100%;
+            padding: 13px;
+            border: none;
+            border-radius: 10px;
+            background: #38bdf8;
+            color: #082f49;
+            font-weight: bold;
+            font-size: 14px;
+            cursor: pointer;
+        }
+
+        button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        button:hover:not(:disabled) {
+            transform: translateY(-1px);
+            box-shadow: 0 10px 25px rgba(56, 189, 248, 0.2);
+        }
+
+        .status {
+            margin-top: 14px;
+            padding: 12px;
+            border-radius: 8px;
+            display: none;
+            font-size: 13px;
+            line-height: 1.5;
+        }
+
+        .status.success {
+            display: block;
+            background: rgba(34, 197, 94, 0.12);
+            border: 1px solid rgba(34, 197, 94, 0.35);
+            color: #86efac;
+        }
+
+        .status.error {
+            display: block;
+            background: rgba(248, 113, 113, 0.12);
+            border: 1px solid rgba(248, 113, 113, 0.35);
+            color: #fca5a5;
+        }
+
+        .status.loading {
+            display: block;
+            background: rgba(56, 189, 248, 0.1);
+            border: 1px solid rgba(56, 189, 248, 0.3);
+            color: #7dd3fc;
+        }
+
+        .dashboard-card {
+            grid-column: 1 / -1;
+        }
+
+        .dashboard-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        .live-dot {
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #4ade80;
+            margin-right: 6px;
+            animation: pulse 1.6s infinite;
+        }
+
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.3; }
+            100% { opacity: 1; }
+        }
+
+        .submission-list {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            max-height: 420px;
+            overflow-y: auto;
+        }
+
+        .submission {
+            padding: 16px;
+            border-radius: 12px;
+            background: rgba(255, 255, 255, 0.04);
+            border: 1px solid rgba(148, 163, 184, 0.15);
+        }
+
+        .submission .top-row {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 6px;
+        }
+
+        .tag {
+            font-size: 11px;
+            font-weight: bold;
+            padding: 3px 9px;
+            border-radius: 999px;
+        }
+
+        .tag.ANALYSIS {
+            background: rgba(168, 85, 247, 0.15);
+            color: #c084fc;
+            border: 1px solid rgba(168, 85, 247, 0.35);
+        }
+
+        .tag.CONTACT {
+            background: rgba(236, 72, 153, 0.15);
+            color: #f9a8d4;
+            border: 1px solid rgba(236, 72, 153, 0.35);
+        }
+
+        .submission time {
+            font-size: 11px;
+            color: #64748b;
+        }
+
+        .submission p {
+            color: #cbd5e1;
+            font-size: 13px;
+            line-height: 1.5;
+        }
+
+        .empty-state {
+            color: #64748b;
+            font-size: 13px;
+            text-align: center;
+            padding: 30px 0;
+        }
+
+        @media (max-width: 800px) {
+            .grid {
+                grid-template-columns: 1fr;
+            }
+
+            h1 {
+                font-size: 32px;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div class="page">
+        <header>
+            <span class="badge">CLOUDHER • FINAL MILESTONE PROJECT</span>
+            <h1>CloudHER AI <span class="highlight">Smart Dashboard</span></h1>
+            <p>
+                A full-stack, AI-powered, serverless web application — upload a
+                document for instant AI summarization, send a message, and
+                watch every submission land on the live dashboard below.
+            </p>
+        </header>
+
+        <div class="grid">
+            <!-- Document Analyzer -->
+            <section class="card">
+                <h2>Analyze a Document</h2>
+                <p class="intro">
+                    Upload a text-based document (.txt, .md) and Groq AI will
+                    summarize it in seconds.
+                </p>
+
+                <form id="analyzeForm">
+                    <div class="form-group">
+                        <label for="fileInput">Document</label>
+                        <input type="file" id="fileInput" accept=".txt,.md,.csv,.log" required />
+                    </div>
+                    <button type="submit" id="analyzeButton">Summarize with AI →</button>
+                </form>
+
+                <div id="analyzeStatus" class="status"></div>
+            </section>
+
+            <!-- Contact Form -->
+            <section class="card">
+                <h2>Let's Connect</h2>
+                <p class="intro">
+                    Have a question, idea, or opportunity? Send a message —
+                    you'll get a confirmation email right away.
+                </p>
+
+                <form id="contactForm">
+                    <div class="form-group">
+                        <label for="name">Full Name</label>
+                        <input type="text" id="name" name="name" placeholder="Your name" required />
+                    </div>
+                    <div class="form-group">
+                        <label for="email">Email Address</label>
+                        <input type="email" id="email" name="email" placeholder="you@example.com" required />
+                    </div>
+                    <div class="form-group">
+                        <label for="subject">Subject</label>
+                        <input type="text" id="subject" name="subject" placeholder="What's this about?" required />
+                    </div>
+                    <div class="form-group">
+                        <label for="message">Message</label>
+                        <textarea id="message" name="message" placeholder="Write your message..." required></textarea>
+                    </div>
+                    <button type="submit" id="contactButton">Send Message →</button>
+                </form>
+
+                <div id="contactStatus" class="status"></div>
+            </section>
+
+            <!-- Live Dashboard -->
+            <section class="card dashboard-card">
+                <div class="dashboard-header">
+                    <h2><span class="live-dot"></span>Live Submissions</h2>
+                    <span id="submissionCount" style="color:#64748b; font-size:13px;"></span>
+                </div>
+                <div id="submissionList" class="submission-list">
+                    <div class="empty-state">Loading submissions…</div>
+                </div>
+            </section>
+        </div>
+
+        <div class="footer" style="text-align:center; color:#64748b; font-size:12px; margin-top:10px;">
+            CloudHER • Final Milestone • AWS CloudFormation, Lambda, API Gateway, DynamoDB, SES, VPC
+        </div>
+    </div>
+
+    <script>
+        // TODO: replace with the ApiEndpoint output from your deployed stack,
+        // e.g. https://abc123.execute-api.us-east-1.amazonaws.com
+        const API_BASE_URL = "https://fkklcg3wx2.execute-api.us-east-1.amazonaws.com";
+
+        const REFRESH_INTERVAL_MS = 8000;
+
+        function setStatus(el, type, text) {
+            el.className = "status " + type;
+            el.textContent = text;
+        }
+
+        // ---- Document Analyzer ----
+        const analyzeForm = document.getElementById("analyzeForm");
+        const analyzeButton = document.getElementById("analyzeButton");
+        const analyzeStatus = document.getElementById("analyzeStatus");
+        const fileInput = document.getElementById("fileInput");
+
+        analyzeForm.addEventListener("submit", async function (event) {
+            event.preventDefault();
+            const file = fileInput.files[0];
+            if (!file) return;
+
+            analyzeButton.disabled = true;
+            setStatus(analyzeStatus, "loading", "Reading file and calling Groq AI…");
+
+            try {
+                const documentText = await file.text();
+
+                const response = await fetch(`${API_BASE_URL}/analyze`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ fileName: file.name, documentText }),
+                });
+
+                const result = await response.json();
+
+                if (response.ok && result.success) {
+                    setStatus(analyzeStatus, "success", `Summary: ${result.summary}`);
+                    fetchSubmissions();
+                } else {
+                    setStatus(analyzeStatus, "error", result.message || "Analysis failed.");
+                }
+            } catch (error) {
+                console.error(error);
+                setStatus(analyzeStatus, "error", "Unable to reach the analysis service.");
+            } finally {
+                analyzeButton.disabled = false;
+            }
+        });
+
+        // ---- Contact Form ----
+        const contactForm = document.getElementById("contactForm");
+        const contactButton = document.getElementById("contactButton");
+        const contactStatus = document.getElementById("contactStatus");
+
+        contactForm.addEventListener("submit", async function (event) {
+            event.preventDefault();
+            contactButton.disabled = true;
+            setStatus(contactStatus, "loading", "Sending message…");
+
+            const formData = {
+                name: document.getElementById("name").value,
+                email: document.getElementById("email").value,
+                subject: document.getElementById("subject").value,
+                message: document.getElementById("message").value,
+            };
+
+            try {
+                const response = await fetch(`${API_BASE_URL}/contact`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(formData),
+                });
+
+                const result = await response.json();
+
+                if (response.ok && result.success) {
+                    setStatus(contactStatus, "success", result.message || "Message sent!");
+                    contactForm.reset();
+                    fetchSubmissions();
+                } else {
+                    setStatus(contactStatus, "error", result.message || "Something went wrong.");
+                }
+            } catch (error) {
+                console.error(error);
+                setStatus(contactStatus, "error", "Unable to connect to the serverless backend.");
+            } finally {
+                contactButton.disabled = false;
+            }
+        });
+
+        // ---- Live Dashboard ----
+        const submissionList = document.getElementById("submissionList");
+        const submissionCount = document.getElementById("submissionCount");
+
+        function timeAgo(unixSeconds) {
+            const diff = Math.floor(Date.now() / 1000) - unixSeconds;
+            if (diff < 60) return `${diff}s ago`;
+            if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
+            if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
+            return `${Math.floor(diff / 86400)}d ago`;
+        }
+
+        function renderSubmissions(items) {
+            if (!items.length) {
+                submissionList.innerHTML = `<div class="empty-state">No submissions yet — try the forms above.</div>`;
+                submissionCount.textContent = "";
+                return;
+            }
+
+            submissionCount.textContent = `${items.length} total`;
+
+            submissionList.innerHTML = items.map((item) => {
+                const type = item.type || "CONTACT";
+                const timestamp = item.timestamp ? timeAgo(item.timestamp) : "";
+
+                if (type === "ANALYSIS") {
+                    return `
+                        <div class="submission">
+                            <div class="top-row">
+                                <span class="tag ANALYSIS">DOCUMENT ANALYSIS</span>
+                                <time>${timestamp}</time>
+                            </div>
+                            <p><strong>${item.fileName || "document"}</strong> — ${item.summary || ""}</p>
+                        </div>`;
+                }
+
+                return `
+                    <div class="submission">
+                        <div class="top-row">
+                            <span class="tag CONTACT">CONTACT FORM</span>
+                            <time>${timestamp}</time>
+                        </div>
+                        <p><strong>${item.name || "Anonymous"}</strong> (${item.email || ""}) — ${item.subject || ""}</p>
+                    </div>`;
+            }).join("");
+        }
+
+        async function fetchSubmissions() {
+            try {
+                const response = await fetch(`${API_BASE_URL}/submissions`);
+                const result = await response.json();
+
+                if (response.ok && result.success) {
+                    renderSubmissions(result.submissions || []);
+                }
+            } catch (error) {
+                console.error("Failed to fetch submissions:", error);
+            }
+        }
+
+        fetchSubmissions();
+        setInterval(fetchSubmissions, REFRESH_INTERVAL_MS);
+    </script>
+</body>
+
+</html>
