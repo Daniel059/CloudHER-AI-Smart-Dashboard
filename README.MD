@@ -14,7 +14,7 @@
 </p>
 
 <p align="center">
-  🔗 <strong><a href="http://cloudher-ai-smart-dashboard-websitebucket-phaedfiamhjd.s3-website-us-east-1.amazonaws.com/">View the Live Demo</a></strong>
+  🔗 <strong><a href="https://cloud-her-ai-smart-dashboard.vercel.app/">View the Live Demo</a></strong>
 </p>
 
 ---
@@ -60,22 +60,27 @@ Everything you see below — every AWS resource, every permission, every network
 
 You can try the deployed application right now, no setup required:
 
-**🔗 [http://cloudher-ai-smart-dashboard-websitebucket-phaedfiamhjd.s3-website-us-east-1.amazonaws.com/](http://cloudher-ai-smart-dashboard-websitebucket-phaedfiamhjd.s3-website-us-east-1.amazonaws.com/)**
+**🔗 [https://cloud-her-ai-smart-dashboard.vercel.app/](https://cloud-her-ai-smart-dashboard.vercel.app/)**
+
+The frontend is hosted on **Vercel**, imported straight from this GitHub repo (with `Website/` set as the root directory). It talks to the exact same AWS backend as before — API Gateway, Lambda, DynamoDB, SES — nothing on the backend changed. The original S3 static website is still live too, since both are just static frontends calling the same API.
 
 Try it out:
 - Upload a `.txt` or `.md` file and watch Groq AI summarize it in seconds
 - Fill out the contact form and check your inbox for a confirmation email
 - Watch the "Live Submissions" panel update automatically with what you just did
 
-> **Note:** Amazon SES is currently in "sandbox mode" on this account, so confirmation emails will only successfully deliver to addresses that have been manually verified. See [SES Sandbox restriction](#4-ses-sandbox-restriction) below.
+> **Note:** Amazon SES is currently in "sandbox mode" on this account, so confirmation emails will only successfully deliver to addresses that have been manually verified. A production access request has been submitted to AWS to lift this restriction — see [SES Sandbox restriction](#4-ses-sandbox-restriction) below.
 
 ---
 
 ## Architecture
 
 ```
-                        Internet
-                           │
+          Vercel Frontend      S3 Static Website
+        (production link)      (original deploy)
+                    │                 │
+                    └────────┬────────┘
+                             │
                     Amazon API Gateway
                            │
         ┌──────────────────┼──────────────────┐
@@ -93,9 +98,6 @@ Try it out:
                            │
                     DynamoDB Table
                (cloudher-dashboard-submissions)
-                           │
-                    S3 Static Website
-               (index.html + error.html)
 ```
 
 All three Lambda functions run inside **private subnets** and reach the internet through a **NAT Gateway**. DynamoDB traffic stays private via a VPC Gateway Endpoint — it never touches the public internet.
@@ -126,6 +128,7 @@ All three Lambda functions run inside **private subnets** and reach the internet
 - **Infrastructure**: AWS CloudFormation
 - **Networking**: VPC, Private Subnets, NAT Gateway, VPC Endpoints
 - **Storage**: Amazon S3 (static website hosting)
+- **Frontend Hosting**: Vercel (production link), alongside the original S3 static website
 
 ---
 
@@ -229,6 +232,10 @@ Once the stack was deployed, I copied the `ApiEndpoint` value from the Outputs t
 **📸 Screenshot 7** shows both submission types sitting in the DynamoDB table.
 **📸 Screenshot 8** shows a clean Lambda execution in CloudWatch Logs, with no errors.
 
+### Step 11 — Deploy the frontend to Vercel
+
+Since `index.html` already had the live API Gateway URL hardcoded, moving it to Vercel needed no extra configuration: I imported the GitHub repo into Vercel, set the **Root Directory** to `Website/`, left the Framework Preset as "Other" with no build command, and deployed. The result is a second, production-style public link that calls the exact same AWS backend as the S3 site.
+
 ---
 
 ## How the Application Works
@@ -257,7 +264,7 @@ Once the stack was deployed, I copied the `ApiEndpoint` value from the Outputs t
 **Fix:** Added a custom JSON encoder in `dashboard_handler.py`.
 
 ### 4. SES Sandbox restriction
-While the AWS account is in SES sandbox mode, emails can only be sent to addresses that have been manually verified. Requesting SES production access (a free AWS support request) would let the app send confirmation emails to any visitor.
+While the AWS account is in SES sandbox mode, emails can only be sent to addresses that have been manually verified — visitors using the live link whose email isn't verified won't receive a confirmation email, even though their message still saves to DynamoDB successfully. A production access request has been submitted via AWS Support Center (Service limit increase → SES Sending Limits) to lift this restriction for all recipients. Until it's approved, testers can be added individually as verified identities in SES.
 
 ---
 
@@ -317,7 +324,8 @@ All screenshots below are stored in [`Screenshots/`](./Screenshots) and are numb
 - How DynamoDB's `Decimal` type breaks normal JSON serialization
 - How third-party APIs like Groq can block requests based on `User-Agent`
 - The importance of reading CloudWatch logs instead of guessing
-- How SES sandbox mode affects real-world testing
+- How SES sandbox mode affects real-world testing, and that requesting production access via AWS Support Center doesn't require a verified sending domain (only one specific console wizard button does)
+- That a static frontend can be hosted anywhere (S3, Vercel, or otherwise) without touching the backend, as long as the API URL stays the same
 - How to structure a professional final project repository
 
 ---
