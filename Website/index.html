@@ -275,6 +275,10 @@
             }
         }
     </style>
+
+    <!-- Libraries for extracting text from PDF and DOCX files client-side -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
 </head>
 
 <body>
@@ -294,14 +298,14 @@
             <section class="card">
                 <h2>Analyze a Document</h2>
                 <p class="intro">
-                    Upload a text-based document (.txt, .md) and Groq AI will
-                    summarize it in seconds.
+                    Upload a document — .txt, .md, .csv, .log, .pdf, or .docx —
+                    and Groq AI will summarize it in seconds.
                 </p>
 
                 <form id="analyzeForm">
                     <div class="form-group">
                         <label for="fileInput">Document</label>
-                        <input type="file" id="fileInput" accept=".txt,.md,.csv,.log" required />
+                        <input type="file" id="fileInput" accept=".txt,.md,.csv,.log,.pdf,.docx" required />
                     </div>
                     <button type="submit" id="analyzeButton">Summarize with AI →</button>
                 </form>
@@ -375,16 +379,71 @@
         const analyzeStatus = document.getElementById("analyzeStatus");
         const fileInput = document.getElementById("fileInput");
 
+        if (window.pdfjsLib) {
+            pdfjsLib.GlobalWorkerOptions.workerSrc =
+                "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+        }
+
+        async function extractPdfText(file) {
+            const arrayBuffer = await file.arrayBuffer();
+            const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+            let fullText = "";
+
+            for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber++) {
+                const page = await pdf.getPage(pageNumber);
+                const content = await page.getTextContent();
+                const pageText = content.items.map((item) => item.str).join(" ");
+                fullText += pageText + "\n\n";
+            }
+
+            return fullText.trim();
+        }
+
+        async function extractDocxText(file) {
+            const arrayBuffer = await file.arrayBuffer();
+            const result = await mammoth.extractRawText({ arrayBuffer });
+            return result.value.trim();
+        }
+
+        async function extractDocumentText(file) {
+            const name = file.name.toLowerCase();
+
+            if (name.endsWith(".pdf")) {
+                return extractPdfText(file);
+            }
+            if (name.endsWith(".docx")) {
+                return extractDocxText(file);
+            }
+            if (name.endsWith(".txt") || name.endsWith(".md") || name.endsWith(".csv") || name.endsWith(".log")) {
+                return file.text();
+            }
+
+            throw new Error(
+                "Unsupported file type. Please upload a .txt, .md, .csv, .log, .pdf, or .docx file."
+            );
+        }
+
         analyzeForm.addEventListener("submit", async function (event) {
             event.preventDefault();
             const file = fileInput.files[0];
             if (!file) return;
 
             analyzeButton.disabled = true;
-            setStatus(analyzeStatus, "loading", "Reading file and calling Groq AI…");
+            setStatus(analyzeStatus, "loading", "Reading your document…");
 
             try {
-                const documentText = await file.text();
+                const documentText = await extractDocumentText(file);
+
+                if (!documentText) {
+                    setStatus(
+                        analyzeStatus,
+                        "error",
+                        "Couldn't find any readable text in that file. It may be a scanned/image-only document."
+                    );
+                    return;
+                }
+
+                setStatus(analyzeStatus, "loading", "Calling Groq AI…");
 
                 const response = await fetch(`${API_BASE_URL}/analyze`, {
                     method: "POST",
@@ -402,7 +461,7 @@
                 }
             } catch (error) {
                 console.error(error);
-                setStatus(analyzeStatus, "error", "Unable to reach the analysis service.");
+                setStatus(analyzeStatus, "error", error.message || "Unable to reach the analysis service.");
             } finally {
                 analyzeButton.disabled = false;
             }
